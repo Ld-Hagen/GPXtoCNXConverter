@@ -174,8 +174,7 @@ class GPX2CNX:
                     first_ele = (track_points[0]['ele'] * 100).quantize(Decimal('1'), decimal.ROUND_HALF_UP)
 
                     relative_points = [f"{first_lat},{first_lon},{first_ele}"]  # First Point - Absolute Coordinates
-
-                    first_diffs = []
+                    prev_diffs = ()    
                     for i in range(1, len(track_points)):  # Calc first diffs
                         lat1 = track_points[i-1]['lat']
                         lon1 = track_points[i-1]['lon']
@@ -185,23 +184,21 @@ class GPX2CNX:
                         lat_diff = (lat2 - lat1) * 10000000
                         lon_diff = (lon2 - lon1) * 10000000
                         ele_diff = track_points[i]['ele'] * 100 - track_points[i-1]['ele'] * 100
-
-                        first_diffs.append((lat_diff, lon_diff, ele_diff))
-
+                        diffs = (lat_diff, lon_diff)
                         if i == 1:  # Second Point
                             lat_diff = lat_diff.quantize(Decimal('1'), decimal.ROUND_HALF_UP)
                             lon_diff = lon_diff.quantize(Decimal('1'), decimal.ROUND_HALF_UP)
                             ele_diff = ele_diff.quantize(Decimal('1'), decimal.ROUND_HALF_UP)
 
                             relative_points.append(f"{lat_diff},{lon_diff},{ele_diff}")
-
-                        if i > 1:  # Third point and subsequent
-                            lat_diff = (lat_diff - first_diffs[i-2][0]).quantize(Decimal('1'), decimal.ROUND_HALF_UP)
-                            lon_diff = (lon_diff - first_diffs[i-2][1]).quantize(Decimal('1'), decimal.ROUND_HALF_UP)
+                        else:  # Third point and subsequent
+                            lat_diff = (lat_diff - prev_diffs[0]).quantize(Decimal('1'), decimal.ROUND_HALF_UP)
+                            lon_diff = (lon_diff - prev_diffs[1]).quantize(Decimal('1'), decimal.ROUND_HALF_UP)
                             ele_diff = (ele_diff).quantize(Decimal('1'), decimal.ROUND_HALF_UP)
                             
                             relative_points.append(f"{lat_diff},{lon_diff},{ele_diff}")
-                       
+                        
+                        prev_diffs = diffs
                 # Create XML
                 route = ET.Element('Route')
                 ET.SubElement(route, 'Id').text = track_name  # Use track name as Id
