@@ -9,6 +9,7 @@ from tkinter import filedialog, scrolledtext
 import decimal
 from decimal import Decimal, getcontext
 import src.poi_types_editor as PE
+import time
 
 
 getcontext().prec = 28
@@ -88,19 +89,27 @@ class GPX2CNX:
         return reparsed.toprettyxml(indent="  ")
 
     # Calculate 3D distance between coordinates
-    def calc_distance(self):
-        R = 6371 * 1000  # Earth radius in meters
-        dlat = Decimal(str(math.radians(self.lat2 - self.lat1)))
-        dlon = Decimal(str(math.radians(self.lon2 - self.lon1)))
-        dele = Decimal(str(self.ele2 - self.ele1))
-        a = Decimal(str((math.sin(dlat/2) * math.sin(dlat/2)) +
-            (math.cos(math.radians(self.lat1)) * math.cos(math.radians(self.lat2)) *
-             math.sin(dlon/2) * math.sin(dlon/2))))
-        b = Decimal(str(2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))))
-        h_distance = R * b
-        distance = (h_distance**2 + dele**2).sqrt()  # 3D distance
-        return distance
-
+    @staticmethod
+    def calc_distance(point1, point2):
+        R = 6371009  # Earth radius in meters
+        
+        lat1 = math.radians(point1['lat'])
+        lon1 = math.radians(point1['lon'])
+        ele1 = point1['ele']
+        lat2 = math.radians(point2['lat'])
+        lon2 = math.radians(point2['lon'])
+        ele2 = point2['ele']
+        
+        dlon = lon2 - lon1
+        dele = ele2 - ele1
+        
+        a = Decimal.from_float((math.cos(lat2) * math.sin(dlon))**2 + 
+            (math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlon))**2).sqrt()
+        b = Decimal.from_float(math.sin(lat1) * math.sin(lat2) + 
+            math.cos(lat1) * math.cos(lat2) * math.cos(dlon))
+        dist = (Decimal.from_float((math.atan2(a,b) * R)**2) + dele**2).sqrt()
+        return dist
+        
     # Converts a list of GPX files to CNX xml format
     def convert_gpx2cnx(self, gpx_files):
         output_dir = os.path.join(os.path.normpath(os.path.split(gpx_files[0])[0]), 'cnx_routes')
@@ -143,17 +152,11 @@ class GPX2CNX:
                 distance = Decimal('0.0')
                 ascent = Decimal('0.0')
                 descent = Decimal('0.0')
+                
                 if len(track_points) > 1:
                     for i in range(1, len(track_points)):
-                        self.lat1 = track_points[i - 1]['lat']
-                        self.lon1 = track_points[i - 1]['lon']
-                        self.ele1 = track_points[i - 1]['ele']
-                        self.lat2 = track_points[i]['lat']
-                        self.lon2 = track_points[i]['lon']
-                        self.ele2 = track_points[i]['ele']
-
-                        distance += self.calc_distance()
-                        ele_diff = self.ele2 - self.ele1
+                        distance += self.calc_distance(track_points[i-1], track_points[i])
+                        ele_diff = track_points[i]['ele'] - track_points[i-1]['ele']
 
                         if ele_diff > 0:
                             ascent += ele_diff
@@ -192,13 +195,13 @@ class GPX2CNX:
 
                             relative_points.append(f"{lat_diff},{lon_diff},{ele_diff}")
 
-                    for i in range(1, len(first_diffs)):  # Calc second diffs
-                        lat_diff = (first_diffs[i][0] - first_diffs[i-1][0]).quantize(Decimal('1'), decimal.ROUND_HALF_UP)
-                        lon_diff = (first_diffs[i][1] - first_diffs[i-1][1]).quantize(Decimal('1'), decimal.ROUND_HALF_UP)
-                        ele_diff = (first_diffs[i][2]).quantize(Decimal('1'), decimal.ROUND_HALF_UP)
-
-                        relative_points.append(f"{lat_diff},{lon_diff},{ele_diff}")
-
+                        if i > 1:  # Third point and subsequent
+                            lat_diff = (lat_diff - first_diffs[i-2][0]).quantize(Decimal('1'), decimal.ROUND_HALF_UP)
+                            lon_diff = (lon_diff - first_diffs[i-2][1]).quantize(Decimal('1'), decimal.ROUND_HALF_UP)
+                            ele_diff = (ele_diff).quantize(Decimal('1'), decimal.ROUND_HALF_UP)
+                            
+                            relative_points.append(f"{lat_diff},{lon_diff},{ele_diff}")
+                       
                 # Create XML
                 route = ET.Element('Route')
                 ET.SubElement(route, 'Id').text = track_name  # Use track name as Id
